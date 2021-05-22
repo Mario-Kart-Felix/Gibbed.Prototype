@@ -1,0 +1,51 @@
+
+Report this ad
+1 Answer
+order by 
+votes
+Up vote
+2
+Down vote
+Accepted
+You can read file on remote side as sequence of byte arrays, stream them thru remoting, and then assemble them back to file locally:
+
+function DownloadSingleFile {
+    param(
+        [System.Management.Automation.Runspaces.PSSession] $FromSession,
+        [string] $RemoteFile,
+        [string] $LocalFile,
+        [int] $ChunkSize = 1mb
+    )
+    Invoke-Command -Session $FromSession -ScriptBlock {
+        param(
+            [string] $FileName,
+            [int] $ChunkSize
+        )
+        $FileInfo = Get-Item -LiteralPath $FileName
+        $FileStream = $FileInfo.OpenRead()
+        try {
+            $FileReader = New-Object System.IO.BinaryReader $FileStream
+            try {
+                for() {
+                    $Chunk = $FileReader.ReadBytes($ChunkSize)
+                    if($Chunk.Length) {
+                        ,$Chunk
+                    } else {
+                        break;
+                    }
+                }
+            } finally {
+                $FileReader.Close();
+            }
+        } finally {
+            $FileStream.Close();
+        }
+    } -ArgumentList $RemoteFile, $ChunkSize | ForEach-Object {
+        $FileName = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($LocalFile)
+        $FileStream = [System.IO.File]::Create($FileName)
+    } {
+        $FileStream.Write($_, 0, $_.Length)
+    } {
+        $FileStream.Close()
+    }
+}
